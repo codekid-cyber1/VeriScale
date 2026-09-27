@@ -2,7 +2,6 @@
 
 import { supabase } from "@/libs/supabase"
 import { product, salesTransaction } from "@/types"
-import { p } from "framer-motion/client"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import { MoreVertical, Trash2 } from "lucide-react"
