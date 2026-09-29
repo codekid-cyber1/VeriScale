@@ -1,8 +1,8 @@
 'use client'
 import { supabase } from "@/libs/supabase";
-import { Search } from "lucide-react";
+import { Search, LogIn, LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 
 
@@ -10,13 +10,32 @@ export default function Navbar() {
     const [search, setSearch] = useState(false)
     const router = useRouter();
     const [isLoggingOut, setIsLoggingOut] = useState(false);
+    const [user, setUser] = useState<any>(null);
+    const [authLoading, setAuthLoading] = useState(true);
 
-    async function handleLogout() {
+    useEffect(() => {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            setUser(session?.user || null)
+            setAuthLoading(false);
+        })
+        
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            setUser(session?.user || null)
+        })
+        
+        return () => subscription.unsubscribe()
+    }, [])
+
+    async function handleAuthAction() {
+        if (!user) {
+            router.push('/login');
+            return;
+        }
+
         setIsLoggingOut(true);
         try {
             const { error } = await supabase.auth.signOut();
             if (error) throw error;
-
             router.push('/login');
         } catch (err: any) {
             console.error("Failed to log out:", err);
@@ -66,35 +85,33 @@ export default function Navbar() {
 
                     {/* Right side actions */}
                     <div className="flex items-center gap-3">
-                        <button
-                            onClick={handleLogout}
-                            disabled={isLoggingOut}
-                            className="group flex items-center gap-2 px-4 py-2 text-sm font-semibold text-gray-600 bg-white hover:bg-red-50 hover:text-red-600 border border-gray-200 hover:border-red-200 rounded-full transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-                        >
-                            {isLoggingOut ? (
-                                <span className="flex items-center gap-2">
-                                    <svg className="animate-spin h-4 w-4 text-red-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                                    <span className="hidden sm:inline">Logging out...</span>
-                                </span>
-                            ) : (
-                                <>
-                                    <svg
-                                        className="w-4 h-4 text-gray-400 group-hover:text-red-500 transition-colors"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        viewBox="0 0 24 24"
-                                    >
-                                        <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth="2"
-                                            d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-                                        />
-                                    </svg>
-                                    <span className="hidden sm:inline">Log Out</span>
-                                </>
-                            )}
-                        </button>
+                        {!authLoading && (
+                            <button
+                                onClick={handleAuthAction}
+                                disabled={isLoggingOut}
+                                className={`group flex items-center gap-2 px-4 py-2 text-sm font-semibold border rounded-full transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm ${
+                                    user 
+                                    ? "text-gray-600 bg-white hover:bg-red-50 hover:text-red-600 border-gray-200 hover:border-red-200" 
+                                    : "text-white bg-gray-900 hover:bg-gray-800 border-transparent"
+                                }`}
+                            >
+                                {isLoggingOut ? (
+                                    <span className="flex items-center gap-2">
+                                        <svg className={`animate-spin h-4 w-4 ${user ? 'text-red-600' : 'text-white'}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                        <span className="hidden sm:inline">Logging out...</span>
+                                    </span>
+                                ) : (
+                                    <>
+                                        {user ? (
+                                            <LogOut className="w-4 h-4 text-gray-400 group-hover:text-red-500 transition-colors" />
+                                        ) : (
+                                            <LogIn className="w-4 h-4 text-white transition-colors" />
+                                        )}
+                                        <span className="hidden sm:inline">{user ? "Log Out" : "Log In"}</span>
+                                    </>
+                                )}
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>

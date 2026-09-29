@@ -49,7 +49,7 @@ export default function Leftbar() {
 
   return (
     <div 
-      className={`p-4 bg-[#C4D9FF] h-[100vh] relative transition-all duration-300 flex flex-col flex-shrink-0 ${isVisible ? 'w-64' : 'w-20'}`}
+      className={`p-4 bg-[#C4D9FF] h-[100vh] relative transition-all duration-300 hidden md:flex flex-col flex-shrink-0 ${isVisible ? 'w-64' : 'w-20'}`}
     >
       {/* logo */}
       <div 
