@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" fill="none">
+  <defs>
+    <linearGradient id="vs-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0F172A"/>
+      <stop offset="100%" stop-color="#1E293B"/>
+    </linearGradient>
+    <linearGradient id="vs-grad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#6366F1"/>
+      <stop offset="50%" stop-color="#8B5CF6"/>
+      <stop offset="100%" stop-color="#06B6D4"/>
+    </linearGradient>
+    <linearGradient id="vs-accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8"/>
+      <stop offset="100%" stop-color="#4ADE80"/>
+    </linearGradient>
+  </defs>
+  <rect width="48" height="48" rx="12" fill="url(#vs-bg)"/>
+  <rect x="1" y="1" width="46" height="46" rx="11" stroke="#334155" stroke-width="1.5"/>
+  <path d="M12 14L22.2 34.4C22.9 35.8 24.9 35.8 25.6 34.4L37 12" stroke="url(#vs-grad)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="37" cy="12" r="3.2" fill="url(#vs-accent)"/>
+</svg>

@@ -1,6 +1,7 @@
 'use client'
 import { supabase } from "@/libs/supabase";
 import { Search, LogIn, LogOut } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 
@@ -54,12 +55,22 @@ export default function Navbar() {
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="flex justify-between items-center h-16">
                     {/* Brand / Logo */}
-                    <div className="flex-shrink-0 flex items-center gap-2.5 cursor-pointer">
-                        <div className="w-9 h-9 bg-gray-900 rounded-xl flex items-center justify-center shadow-sm">
-                            <span className="text-white font-bold text-lg leading-none">V</span>
+                    <Link href="/" className="flex-shrink-0 flex items-center gap-2.5 cursor-pointer group">
+                        <div className="w-9 h-9 bg-slate-900 rounded-xl flex items-center justify-center shadow-sm border border-slate-700/60 p-1.5 transition-transform duration-200 group-hover:scale-105">
+                            <svg className="w-full h-full" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M7 8L15 24C15.4 24.8 16.6 24.8 17 24L25 8" stroke="url(#nav-vs-grad)" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"/>
+                                <circle cx="25" cy="8" r="2.2" fill="#38BDF8"/>
+                                <defs>
+                                    <linearGradient id="nav-vs-grad" x1="7" y1="24" x2="25" y2="8" gradientUnits="userSpaceOnUse">
+                                        <stop stopColor="#6366F1"/>
+                                        <stop offset="0.5" stopColor="#8B5CF6"/>
+                                        <stop offset="1" stopColor="#06B6D4"/>
+                                    </linearGradient>
+                                </defs>
+                            </svg>
                         </div>
                         <span className="font-bold text-xl text-gray-900 tracking-tight hidden sm:block">veriScale</span>
-                    </div>
+                    </Link>
 
                     {/* Search Bar - Center */}
                     <div className="flex-1 flex justify-center max-w-md mx-4">
