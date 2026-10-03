@@ -3,9 +3,9 @@ export interface ProductVariant {
     product_id: string;
     user_id?: string;
     unit_name: string; // e.g. "Full Bag", "1/2 Bag", "1/4 Bag", "Kg", "Single Piece"
-    cost_price: number;
-    selling_price: number;
-    stock_equivalent: number; // fraction of base unit deducted, e.g. 1.0, 0.5, 0.25
+    cost_price?: number;
+    selling_price?: number;
+    stock_equivalent?: number;
     created_at?: string;
 }
 
@@ -13,8 +13,8 @@ export interface Product {
     id: string;
     user_id?: string;
     name: string; // e.g. "Rice", "Fabric", "Sugar"
-    stock: number; // master stock
-    unit_label?: string; // e.g. "Bags", "Kg", "Pcs"
+    stock?: number;
+    unit_label?: string;
     variants?: ProductVariant[];
     created_at?: string;
 }
