@@ -18,8 +18,46 @@ import {
     DollarSign, 
     ShoppingBag, 
     Boxes,
+    Calendar,
+    Filter,
+    RotateCcw,
+    ChevronLeft,
+    ChevronRight,
+    CalendarRange
 } from "lucide-react"
 import Link from "next/link"
+
+// Helper to extract local YYYY-MM-DD from any date string or Date object
+function getLocalDateString(dateInput: string | Date): string {
+    const d = new Date(dateInput)
+    if (isNaN(d.getTime())) return ''
+    const year = d.getFullYear()
+    const month = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+}
+
+// Format friendly date like "Oct 19, 2026"
+function formatFriendlyDate(dateStr: string): string {
+    if (!dateStr) return ''
+    const parts = dateStr.split('-').map(Number)
+    if (parts.length !== 3 || parts.some(isNaN)) return dateStr
+    const [y, m, d] = parts
+    const date = new Date(y, m - 1, d)
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+// Format friendly month like "October 2026"
+function formatFriendlyMonth(monthStr: string): string {
+    if (!monthStr) return ''
+    const parts = monthStr.split('-').map(Number)
+    if (parts.length !== 2 || parts.some(isNaN)) return monthStr
+    const [y, m] = parts
+    const date = new Date(y, m - 1, 1)
+    return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+}
+
+export type DateFilterType = 'all' | 'today' | 'this_week' | 'this_month' | 'last_month' | 'by_month' | 'custom'
 
 // Helper to parse product name and encoded units from Supabase
 function parseProductRecord(row: any): Product {
@@ -82,6 +120,35 @@ export default function Dashboard() {
     // Breakdown Accordion States for Metric Cards
     const [showRevenueBreakdown, setShowRevenueBreakdown] = useState<boolean>(false)
     const [showProfitBreakdown, setShowProfitBreakdown] = useState<boolean>(false)
+
+    // Date Filtering & Sequence State
+    const [dateFilterType, setDateFilterType] = useState<DateFilterType>('all')
+    const [startDate, setStartDate] = useState<string>('')
+    const [endDate, setEndDate] = useState<string>('')
+    const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+        const d = new Date()
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    })
+
+    const stepMonth = (delta: number) => {
+        const [y, m] = selectedMonth.split('-').map(Number)
+        const d = new Date(y, m - 1 + delta, 1)
+        const newMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+        setSelectedMonth(newMonth)
+        setDateFilterType('by_month')
+    }
+
+    const setTodayMonth = () => {
+        const d = new Date()
+        setSelectedMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+        setDateFilterType('by_month')
+    }
+
+    const resetFilter = () => {
+        setDateFilterType('all')
+        setStartDate('')
+        setEndDate('')
+    }
 
     // Modal State for Goods & Units (Create & Edit)
     const [isProductModalOpen, setIsProductModalOpen] = useState<boolean>(false)
@@ -279,12 +346,122 @@ export default function Dashboard() {
     const liveTotalAmount = Math.round(qty * sellPrice * 100) / 100
     const liveTotalProfit = Math.round(qty * (sellPrice - buyPrice) * 100) / 100
 
-    // Grand Totals
-    const totalRevenue = transactions.reduce((acc, t) => acc + t.totalAmount, 0)
-    const totalProfit = transactions.reduce((acc, t) => acc + t.totalProfit, 0)
-    const totalSalesCount = transactions.length
+    // Effective Date Filter Resolution
+    const { effectiveStartDate, effectiveEndDate, filterLabel } = useMemo(() => {
+        const today = new Date()
+        const todayStr = getLocalDateString(today)
 
-    // Per-Product Analytics Breakdown
+        if (dateFilterType === 'all') {
+            return { effectiveStartDate: null, effectiveEndDate: null, filterLabel: 'All Time' }
+        }
+
+        if (dateFilterType === 'today') {
+            return {
+                effectiveStartDate: todayStr,
+                effectiveEndDate: todayStr,
+                filterLabel: `Today (${formatFriendlyDate(todayStr)})`
+            }
+        }
+
+        if (dateFilterType === 'this_week') {
+            const d = new Date(today)
+            const dayOfWeek = d.getDay()
+            const diff = d.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1) // Monday
+            const monday = new Date(d.setDate(diff))
+            const mondayStr = getLocalDateString(monday)
+            return {
+                effectiveStartDate: mondayStr,
+                effectiveEndDate: todayStr,
+                filterLabel: `This Week (${formatFriendlyDate(mondayStr)} – ${formatFriendlyDate(todayStr)})`
+            }
+        }
+
+        if (dateFilterType === 'this_month') {
+            const y = today.getFullYear()
+            const m = today.getMonth()
+            const firstDayStr = `${y}-${String(m + 1).padStart(2, '0')}-01`
+            const lastDay = new Date(y, m + 1, 0).getDate()
+            const lastDayStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+            return {
+                effectiveStartDate: firstDayStr,
+                effectiveEndDate: lastDayStr,
+                filterLabel: `This Month (${today.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })})`
+            }
+        }
+
+        if (dateFilterType === 'last_month') {
+            const y = today.getMonth() === 0 ? today.getFullYear() - 1 : today.getFullYear()
+            const m = today.getMonth() === 0 ? 11 : today.getMonth() - 1
+            const firstDayStr = `${y}-${String(m + 1).padStart(2, '0')}-01`
+            const lastDay = new Date(y, m + 1, 0).getDate()
+            const lastDayStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+            const mDate = new Date(y, m, 1)
+            return {
+                effectiveStartDate: firstDayStr,
+                effectiveEndDate: lastDayStr,
+                filterLabel: `Last Month (${mDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })})`
+            }
+        }
+
+        if (dateFilterType === 'by_month') {
+            if (!selectedMonth) return { effectiveStartDate: null, effectiveEndDate: null, filterLabel: 'Select Month' }
+            const [y, m] = selectedMonth.split('-').map(Number)
+            const firstDayStr = `${y}-${String(m).padStart(2, '0')}-01`
+            const lastDay = new Date(y, m, 0).getDate()
+            const lastDayStr = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+            return {
+                effectiveStartDate: firstDayStr,
+                effectiveEndDate: lastDayStr,
+                filterLabel: formatFriendlyMonth(selectedMonth)
+            }
+        }
+
+        if (dateFilterType === 'custom') {
+            let label = 'Custom Range'
+            if (startDate && endDate) {
+                label = `${formatFriendlyDate(startDate)} – ${formatFriendlyDate(endDate)}`
+            } else if (startDate) {
+                label = `From ${formatFriendlyDate(startDate)}`
+            } else if (endDate) {
+                label = `Up to ${formatFriendlyDate(endDate)}`
+            }
+            return {
+                effectiveStartDate: startDate || null,
+                effectiveEndDate: endDate || null,
+                filterLabel: label
+            }
+        }
+
+        return { effectiveStartDate: null, effectiveEndDate: null, filterLabel: 'All Time' }
+    }, [dateFilterType, startDate, endDate, selectedMonth])
+
+    const isFilterActive = dateFilterType !== 'all'
+
+    // Filtered Transactions
+    const filteredTransactions = useMemo(() => {
+        if (!effectiveStartDate && !effectiveEndDate) {
+            return transactions
+        }
+        return transactions.filter(tx => {
+            const txDateStr = getLocalDateString(tx.date)
+            if (!txDateStr) return false
+            if (effectiveStartDate && txDateStr < effectiveStartDate) return false
+            if (effectiveEndDate && txDateStr > effectiveEndDate) return false
+            return true
+        })
+    }, [transactions, effectiveStartDate, effectiveEndDate])
+
+    // Totals for filtered transactions (reflects selected period)
+    const totalRevenue = useMemo(() => filteredTransactions.reduce((acc, t) => acc + t.totalAmount, 0), [filteredTransactions])
+    const totalProfit = useMemo(() => filteredTransactions.reduce((acc, t) => acc + t.totalProfit, 0), [filteredTransactions])
+    const totalSalesCount = filteredTransactions.length
+
+    // All-time totals for reference and comparison
+    const allTimeRevenue = useMemo(() => transactions.reduce((acc, t) => acc + t.totalAmount, 0), [transactions])
+    const allTimeProfit = useMemo(() => transactions.reduce((acc, t) => acc + t.totalProfit, 0), [transactions])
+    const allTimeSalesCount = transactions.length
+
+    // Per-Product Analytics Breakdown (calculated for the filtered period)
     const productAnalytics: ProductAnalytics[] = useMemo(() => {
         const statsMap = new Map<string, { revenue: number; profit: number; salesCount: number; unitsSold: number }>()
 
@@ -292,7 +469,7 @@ export default function Dashboard() {
             statsMap.set(p.name.toLowerCase().trim(), { revenue: 0, profit: 0, salesCount: 0, unitsSold: 0 })
         }
 
-        for (const tx of transactions) {
+        for (const tx of filteredTransactions) {
             let pName = ''
             if (tx.items) {
                 const match = tx.items.match(/^([^(:]+)/)
@@ -328,7 +505,7 @@ export default function Dashboard() {
         })
 
         return analyticsList.sort((a, b) => b.revenue - a.revenue)
-    }, [products, transactions, totalRevenue, totalProfit])
+    }, [products, filteredTransactions, totalRevenue, totalProfit])
 
     // Quick Preset Quantity Helpers
     const presetQuantities = [1, 2, 3, 5, 10]
@@ -648,6 +825,223 @@ export default function Dashboard() {
                     </div>
                 </div>
 
+                {/* Filter & Period Controls */}
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-5 space-y-3.5 transition-all">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-2.5">
+                            <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
+                                <Calendar className="w-4 h-4" />
+                            </div>
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <h3 className="text-sm font-bold text-gray-900">Period & Date Filter</h3>
+                                    {isFilterActive && (
+                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
+                                            {filterLabel}
+                                        </span>
+                                    )}
+                                </div>
+                                <p className="text-xs text-gray-500">Filter sales, revenue, and profit across specific months or custom periods</p>
+                            </div>
+                        </div>
+
+                        {/* Quick Reset if filtered */}
+                        {isFilterActive && (
+                            <button
+                                type="button"
+                                onClick={resetFilter}
+                                className="self-start sm:self-auto inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors cursor-pointer"
+                            >
+                                <RotateCcw className="w-3.5 h-3.5 text-gray-500" />
+                                <span>Reset to All Time</span>
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Filter Mode Presets */}
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                        <button
+                            type="button"
+                            onClick={() => setDateFilterType('all')}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                                dateFilterType === 'all'
+                                    ? 'bg-gray-900 text-white shadow-xs'
+                                    : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200/60'
+                            }`}
+                        >
+                            All Time
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setDateFilterType('today')}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                                dateFilterType === 'today'
+                                    ? 'bg-gray-900 text-white shadow-xs'
+                                    : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200/60'
+                            }`}
+                        >
+                            Today
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setDateFilterType('this_week')}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                                dateFilterType === 'this_week'
+                                    ? 'bg-gray-900 text-white shadow-xs'
+                                    : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200/60'
+                            }`}
+                        >
+                            This Week
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setDateFilterType('this_month')}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                                dateFilterType === 'this_month'
+                                    ? 'bg-gray-900 text-white shadow-xs'
+                                    : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200/60'
+                            }`}
+                        >
+                            This Month
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setDateFilterType('last_month')}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                                dateFilterType === 'last_month'
+                                    ? 'bg-gray-900 text-white shadow-xs'
+                                    : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200/60'
+                            }`}
+                        >
+                            Last Month
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setDateFilterType('by_month')}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                                dateFilterType === 'by_month'
+                                    ? 'bg-indigo-600 text-white shadow-xs ring-2 ring-indigo-200'
+                                    : 'bg-indigo-50/70 text-indigo-700 hover:bg-indigo-100 border border-indigo-200/60'
+                            }`}
+                        >
+                            <CalendarRange className="w-3.5 h-3.5" />
+                            <span>Monthly Sequence</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setDateFilterType('custom')}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                                dateFilterType === 'custom'
+                                    ? 'bg-purple-600 text-white shadow-xs ring-2 ring-purple-200'
+                                    : 'bg-purple-50/70 text-purple-700 hover:bg-purple-100 border border-purple-200/60'
+                            }`}
+                        >
+                            <Filter className="w-3.5 h-3.5" />
+                            <span>Custom Date Range</span>
+                        </button>
+                    </div>
+
+                    {/* Sub-Panel: Monthly Sequence Picker */}
+                    {dateFilterType === 'by_month' && (
+                        <div className="pt-2 border-t border-gray-100 flex flex-wrap items-center gap-2.5 bg-indigo-50/40 p-3 rounded-xl border border-indigo-100">
+                            <span className="text-xs font-semibold text-gray-700">Month Sequence:</span>
+                            <div className="inline-flex items-center bg-white rounded-lg border border-gray-200 p-0.5 shadow-2xs">
+                                <button
+                                    type="button"
+                                    onClick={() => stepMonth(-1)}
+                                    title="Previous Month"
+                                    className="p-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors cursor-pointer"
+                                >
+                                    <ChevronLeft className="w-4 h-4" />
+                                </button>
+                                <input
+                                    type="month"
+                                    value={selectedMonth}
+                                    onChange={(e) => {
+                                        if (e.target.value) {
+                                            setSelectedMonth(e.target.value)
+                                        }
+                                    }}
+                                    className="px-2.5 py-1 text-xs font-bold text-gray-800 bg-transparent outline-none cursor-pointer"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => stepMonth(1)}
+                                    title="Next Month"
+                                    className="p-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors cursor-pointer"
+                                >
+                                    <ChevronRight className="w-4 h-4" />
+                                </button>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={setTodayMonth}
+                                className="px-2.5 py-1 text-xs font-medium text-indigo-700 hover:text-indigo-900 bg-indigo-100/70 hover:bg-indigo-100 rounded-lg transition-colors cursor-pointer"
+                            >
+                                Current Month
+                            </button>
+                            <span className="text-xs text-gray-500 ml-auto hidden md:inline">
+                                Showing transactions & profits strictly for <strong className="text-gray-800">{formatFriendlyMonth(selectedMonth)}</strong>
+                            </span>
+                        </div>
+                    )}
+
+                    {/* Sub-Panel: Custom Date Range Inputs */}
+                    {dateFilterType === 'custom' && (
+                        <div className="pt-2 border-t border-gray-100 flex flex-wrap items-center gap-3 bg-purple-50/40 p-3 rounded-xl border border-purple-100">
+                            <div className="flex items-center gap-2">
+                                <label className="text-xs font-semibold text-gray-700">From:</label>
+                                <input
+                                    type="date"
+                                    value={startDate}
+                                    onChange={(e) => setStartDate(e.target.value)}
+                                    className="px-3 py-1.5 text-xs font-semibold text-gray-800 bg-white border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-purple-200 focus:border-purple-500"
+                                />
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <label className="text-xs font-semibold text-gray-700">To:</label>
+                                <input
+                                    type="date"
+                                    value={endDate}
+                                    onChange={(e) => setEndDate(e.target.value)}
+                                    className="px-3 py-1.5 text-xs font-semibold text-gray-800 bg-white border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-purple-200 focus:border-purple-500"
+                                />
+                            </div>
+                            {(startDate || endDate) && (
+                                <button
+                                    type="button"
+                                    onClick={() => { setStartDate(''); setEndDate(''); }}
+                                    className="text-xs font-semibold text-gray-500 hover:text-red-600 transition-colors ml-auto cursor-pointer"
+                                >
+                                    Clear dates
+                                </button>
+                            )}
+                            {startDate && endDate && startDate > endDate && (
+                                <div className="w-full text-xs font-medium text-amber-600 flex items-center gap-1.5">
+                                    <AlertCircle className="w-3.5 h-3.5" />
+                                    <span>&quot;From&quot; date is after &quot;To&quot; date. Please adjust your range.</span>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Filter Summary Banner (when filtered) */}
+                    {isFilterActive && (
+                        <div className="pt-2.5 border-t border-gray-100 flex flex-wrap items-center justify-between text-xs text-gray-600 gap-2 bg-gray-50/70 px-3.5 py-2.5 rounded-xl border border-gray-100">
+                            <div className="flex items-center gap-2">
+                                <span className="font-bold text-gray-900">{filterLabel}</span>
+                                <span className="text-gray-300">•</span>
+                                <span>Showing <strong>{filteredTransactions.length}</strong> {filteredTransactions.length === 1 ? 'sale' : 'sales'} (out of {allTimeSalesCount} total)</span>
+                            </div>
+                            <div className="flex items-center gap-3 font-medium">
+                                <span>Period Sales: <strong className="text-gray-900 font-bold">₦{totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
+                                <span>Period Profit: <strong className="text-emerald-600 font-bold">₦{totalProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
                 {/* Metrics Cards with Per-Product Breakdown Accordions */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
                     
@@ -655,7 +1049,14 @@ export default function Dashboard() {
                     <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden transition-all duration-200">
                         <div className="p-5 md:p-6">
                             <div className="flex items-center justify-between">
-                                <span className="text-xs md:text-sm font-semibold text-gray-500 uppercase tracking-wider">Total Revenue</span>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs md:text-sm font-semibold text-gray-500 uppercase tracking-wider">Total Revenue</span>
+                                    {isFilterActive && (
+                                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-100">
+                                            Period
+                                        </span>
+                                    )}
+                                </div>
                                 <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
                                     <DollarSign className="w-4 h-4" />
                                 </div>
@@ -663,10 +1064,15 @@ export default function Dashboard() {
                             <p className="mt-2 text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight">
                                 ₦{totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </p>
+                            {isFilterActive && (
+                                <p className="text-[11px] text-gray-400 mt-1">
+                                    All-time total: ₦{allTimeRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </p>
+                            )}
                             <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
                                 <button
                                     onClick={() => setShowRevenueBreakdown(!showRevenueBreakdown)}
-                                    className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors focus:outline-none"
+                                    className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors focus:outline-none cursor-pointer"
                                 >
                                     <span>{showRevenueBreakdown ? "Hide product breakdown" : "View breakdown by product"}</span>
                                     {showRevenueBreakdown ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
@@ -678,9 +1084,11 @@ export default function Dashboard() {
                         {/* Revenue Accordion Breakdown List */}
                         {showRevenueBreakdown && (
                             <div className="bg-gray-50/70 border-t border-gray-100 p-4 space-y-3">
-                                <h4 className="text-xs font-bold text-gray-600 uppercase tracking-wider">Revenue Earned per Product</h4>
+                                <h4 className="text-xs font-bold text-gray-600 uppercase tracking-wider">
+                                    Revenue Earned per Product {isFilterActive && `(${filterLabel})`}
+                                </h4>
                                 {productAnalytics.length === 0 ? (
-                                    <p className="text-xs text-gray-400 italic">No product revenue recorded yet.</p>
+                                    <p className="text-xs text-gray-400 italic">No product revenue recorded for this period.</p>
                                 ) : (
                                     <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
                                         {productAnalytics.map((item, idx) => (
@@ -697,7 +1105,7 @@ export default function Dashboard() {
                                                 </div>
                                                 <div className="flex justify-between text-[11px] text-gray-400">
                                                     <span>{item.salesCount} {item.salesCount === 1 ? 'sale' : 'sales'}</span>
-                                                    <span>{item.revenuePercentage.toFixed(1)}% of total</span>
+                                                    <span>{item.revenuePercentage.toFixed(1)}% of period total</span>
                                                 </div>
                                             </div>
                                         ))}
@@ -711,7 +1119,14 @@ export default function Dashboard() {
                     <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden transition-all duration-200">
                         <div className="p-5 md:p-6">
                             <div className="flex items-center justify-between">
-                                <span className="text-xs md:text-sm font-semibold text-gray-500 uppercase tracking-wider">Total Profit</span>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs md:text-sm font-semibold text-gray-500 uppercase tracking-wider">Total Profit</span>
+                                    {isFilterActive && (
+                                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-100">
+                                            Period
+                                        </span>
+                                    )}
+                                </div>
                                 <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
                                     <TrendingUp className="w-4 h-4" />
                                 </div>
@@ -719,10 +1134,15 @@ export default function Dashboard() {
                             <p className="mt-2 text-2xl md:text-3xl font-extrabold text-emerald-600 tracking-tight">
                                 ₦{totalProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </p>
+                            {isFilterActive && (
+                                <p className="text-[11px] text-gray-400 mt-1">
+                                    All-time total: ₦{allTimeProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </p>
+                            )}
                             <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
                                 <button
                                     onClick={() => setShowProfitBreakdown(!showProfitBreakdown)}
-                                    className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 hover:text-emerald-800 transition-colors focus:outline-none"
+                                    className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 hover:text-emerald-800 transition-colors focus:outline-none cursor-pointer"
                                 >
                                     <span>{showProfitBreakdown ? "Hide product breakdown" : "View breakdown by product"}</span>
                                     {showProfitBreakdown ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
@@ -736,9 +1156,11 @@ export default function Dashboard() {
                         {/* Profit Accordion Breakdown List */}
                         {showProfitBreakdown && (
                             <div className="bg-emerald-50/30 border-t border-gray-100 p-4 space-y-3">
-                                <h4 className="text-xs font-bold text-gray-600 uppercase tracking-wider">Net Profit Earned per Product</h4>
+                                <h4 className="text-xs font-bold text-gray-600 uppercase tracking-wider">
+                                    Net Profit Earned per Product {isFilterActive && `(${filterLabel})`}
+                                </h4>
                                 {productAnalytics.length === 0 ? (
-                                    <p className="text-xs text-gray-400 italic">No product profit recorded yet.</p>
+                                    <p className="text-xs text-gray-400 italic">No product profit recorded for this period.</p>
                                 ) : (
                                     <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
                                         {productAnalytics.map((item, idx) => {
@@ -757,7 +1179,7 @@ export default function Dashboard() {
                                                     </div>
                                                     <div className="flex justify-between text-[11px] text-gray-400">
                                                         <span>{margin}% margin</span>
-                                                        <span>{item.profitPercentage.toFixed(1)}% of total profit</span>
+                                                        <span>{item.profitPercentage.toFixed(1)}% of period profit</span>
                                                     </div>
                                                 </div>
                                             )
@@ -772,7 +1194,14 @@ export default function Dashboard() {
                     <div className="bg-white p-5 md:p-6 rounded-2xl shadow-sm border border-gray-200 flex flex-col justify-between">
                         <div>
                             <div className="flex items-center justify-between">
-                                <span className="text-xs md:text-sm font-semibold text-gray-500 uppercase tracking-wider">Total Sales</span>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs md:text-sm font-semibold text-gray-500 uppercase tracking-wider">Total Sales</span>
+                                    {isFilterActive && (
+                                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-100">
+                                            Period
+                                        </span>
+                                    )}
+                                </div>
                                 <div className="p-2 bg-purple-50 text-purple-600 rounded-xl">
                                     <ShoppingBag className="w-4 h-4" />
                                 </div>
@@ -780,6 +1209,11 @@ export default function Dashboard() {
                             <p className="mt-2 text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight">
                                 {totalSalesCount} <span className="text-sm font-normal text-gray-500">completed</span>
                             </p>
+                            {isFilterActive && (
+                                <p className="text-[11px] text-gray-400 mt-1">
+                                    All-time total: {allTimeSalesCount} sales
+                                </p>
+                            )}
                         </div>
                         <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
                             <span>Average Ticket:</span>
@@ -970,21 +1404,55 @@ export default function Dashboard() {
 
                         {/* Recent Transactions Card */}
                         <div className="bg-white p-5 md:p-6 rounded-2xl shadow-sm border border-gray-200">
-                            <div className="flex items-center justify-between mb-4 md:mb-6">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-4 md:mb-6">
                                 <div>
-                                    <h2 className="text-lg font-bold text-gray-900">Recent Transactions</h2>
+                                    <div className="flex items-center gap-2">
+                                        <h2 className="text-lg font-bold text-gray-900">Recent Transactions</h2>
+                                        {isFilterActive && (
+                                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">
+                                                {filterLabel}
+                                            </span>
+                                        )}
+                                    </div>
                                     <p className="text-xs text-gray-500">Portions, sale amounts, and net profits</p>
                                 </div>
-                                <span className="text-xs font-semibold px-2.5 py-1 bg-gray-100 text-gray-700 rounded-lg">
-                                    {transactions.length} records
-                                </span>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs font-semibold px-2.5 py-1 bg-gray-100 text-gray-700 rounded-lg">
+                                        {filteredTransactions.length} {filteredTransactions.length === 1 ? 'record' : 'records'}
+                                        {isFilterActive && ` of ${allTimeSalesCount}`}
+                                    </span>
+                                    {isFilterActive && (
+                                        <button
+                                            type="button"
+                                            onClick={resetFilter}
+                                            title="Reset filter to All Time"
+                                            className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors cursor-pointer"
+                                        >
+                                            <RotateCcw className="w-3.5 h-3.5" />
+                                        </button>
+                                    )}
+                                </div>
                             </div>
 
-                            {transactions.length === 0 ? (
+                            {filteredTransactions.length === 0 ? (
                                 <div className="text-center py-12 text-gray-400 bg-gray-50/50 rounded-xl border border-dashed border-gray-200">
                                     <ShoppingBag className="w-8 h-8 mx-auto mb-2 text-gray-300" />
-                                    <p className="text-sm font-medium">No sales recorded yet.</p>
-                                    <p className="text-xs text-gray-400 mt-1">Select a product on the left to record your first sale.</p>
+                                    <p className="text-sm font-medium">
+                                        {isFilterActive ? 'No sales found for this period.' : 'No sales recorded yet.'}
+                                    </p>
+                                    <p className="text-xs text-gray-400 mt-1">
+                                        {isFilterActive ? (
+                                            <button
+                                                type="button"
+                                                onClick={resetFilter}
+                                                className="text-indigo-600 hover:underline font-semibold cursor-pointer"
+                                            >
+                                                Click here to reset filter to All Time
+                                            </button>
+                                        ) : (
+                                            'Select a product on the left to record your first sale.'
+                                        )}
+                                    </p>
                                 </div>
                             ) : (
                                 <div className="overflow-x-auto pb-12 -mx-5 md:-mx-6 px-5 md:px-6">
@@ -999,7 +1467,7 @@ export default function Dashboard() {
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-100">
-                                            {transactions.map((tx) => (
+                                            {filteredTransactions.map((tx) => (
                                                 <tr key={tx.id} className="hover:bg-gray-50/80 transition-colors">
                                                     <td className="px-4 py-3.5 font-medium text-gray-900">
                                                         <div className="flex flex-col">
@@ -1021,7 +1489,7 @@ export default function Dashboard() {
                                                     <td className="px-4 py-3.5 text-right relative">
                                                         <button
                                                             onClick={() => setActiveDropdown(activeDropdown?.id === tx.id ? null : { type: 'transaction', id: tx.id })}
-                                                            className="text-gray-400 hover:text-gray-900 p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+                                                            className="text-gray-400 hover:text-gray-900 p-1.5 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
                                                         >
                                                             <MoreVertical className="w-4 h-4" />
                                                         </button>
@@ -1031,7 +1499,7 @@ export default function Dashboard() {
                                                                 <div className="absolute right-4 top-10 w-28 bg-white rounded-xl shadow-lg border border-gray-100 z-50 py-1 text-left">
                                                                     <button
                                                                         onClick={() => { setActiveDropdown(null); deleteTransaction(tx.id); }}
-                                                                        className="w-full px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2 font-medium"
+                                                                        className="w-full px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2 font-medium cursor-pointer"
                                                                     >
                                                                         <Trash2 className="w-3.5 h-3.5" /> Delete
                                                                     </button>
